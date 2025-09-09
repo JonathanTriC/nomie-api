@@ -17,6 +17,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var tokenBlacklist = make(map[string]bool)
@@ -48,14 +50,20 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	// Parse multipart form
 	if err := c.Request.ParseMultipartForm(10 << 20); err != nil { // max memory buffer
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse form"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"form_key": "form",
+			"error": "Failed to parse form",
+		})
 		return
 	}
 
 	// Get avatar
 	file, header, err := c.Request.FormFile("avatar")
 	if err != nil && err != http.ErrMissingFile {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file upload"})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"form_key": "avatar",
+			"error": "Invalid file upload",
+		})
 		return
 	}
 	defer func() {
@@ -68,7 +76,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	if file != nil {
 		// Validate file size (max 5MB)
 		if header.Size > 5*1024*1024 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "File size must be less than 5MB"})
+			c.JSON(http.StatusBadRequest, gin.H{
+				"form_key": "avatar",
+				"error": "File size must be less than 5MB",
+			})
 			return
 		}
 
@@ -80,7 +91,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			".png":  true,
 		}
 		if !allowedExt[ext] {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "File must be .jpg, .jpeg, or .png"})
+			c.JSON(http.StatusBadRequest, gin.H{
+				"form_key": "avatar",
+				"error": "File must be .jpg, .jpeg, or .png",
+			})
 			return
 		}
 
@@ -94,7 +108,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			PublicID: fmt.Sprintf("avatar_%s", utils.GenerateRandomID()),
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload avatar"})
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"form_key": "avatar",
+				"error": "Failed to upload avatar",
+			})
 			return
 		}
 		avatarURL = uploadResult.SecureURL
@@ -107,6 +124,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Email:    c.PostForm("email"),
 		Password: c.PostForm("password"),
 	}
+
+	caser := cases.Title(language.English)
+	user.Fullname = caser.String(strings.ToLower(user.Fullname)) 
+	user.Username = strings.ToLower(user.Username)               
+	user.Email = strings.ToLower(user.Email) 
 
 	if file == nil {
 	parts := strings.Fields(user.Fullname)
@@ -133,7 +155,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 	if err := user.Validate(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": utils.FormatErrorRegister(err)})
+		if vErr, ok := err.(*auth_models.ValidationError); ok {
+				c.JSON(http.StatusBadRequest, gin.H{
+						"form_key": vErr.FormKey,
+						"error":   vErr.Message,
+				})
+				return
+		}
+		// fallback
+		c.JSON(http.StatusBadRequest, gin.H{
+				"form_key": "form",
+				"error":   "Invalid input",
+		})
 		return
 	}
 
@@ -141,29 +174,44 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var exists bool
 	err = h.db.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`, user.Email).Scan(&exists)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"form_key": "form",
+			"error": "Database error",
+		})
 		return
 	}
 	if exists {
-		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
+		c.JSON(http.StatusConflict, gin.H{
+			"form_key": "email",
+			"error": "Email already registered",
+		})
 		return
 	}
 
 	// Check username exists
 	err = h.db.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)`, user.Username).Scan(&exists)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"form_key": "form",
+			"error": "Database error",
+		})
 		return
 	}
 	if exists {
-		c.JSON(http.StatusConflict, gin.H{"error": "Username already taken"})
+		c.JSON(http.StatusConflict, gin.H{
+			"form_key": "username",
+			"error": "Username already taken",
+		})
 		return
 	}
 
 	// Hash password
 	hashedPassword, err := utils.HashPassword(user.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Password processing failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"form_key": "password",
+			"error": "Password processing failed",
+		})
 		return
 	}
 
@@ -177,7 +225,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	).Scan(&id)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "User creation failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"form_key": "form",
+			"error": "User creation failed",
+		})
 		return
 	}
 
@@ -195,6 +246,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid login data"})
         return
     }
+
+		login.Email = strings.ToLower(login.Email)
 
     var user auth_models.User
     err := h.db.DB.QueryRow(`
@@ -254,6 +307,8 @@ func (h *AuthHandler) CheckEmail(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
         return
     }
+		
+		req.Email = strings.ToLower(req.Email)
 
     var exists bool
     err := h.db.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`, req.Email).Scan(&exists)
