@@ -333,30 +333,46 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Parse and validate refresh token
-	token, err := jwt.ParseWithClaims(request.RefreshToken, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(request.RefreshToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return h.jwtSecret, nil
 	})
-	if err != nil || !token.Valid {
+
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		return
 	}
 
-	claims, ok := token.Claims.(*Claims)
-	if !ok || claims.ExpiresAt.Time.Before(time.Now()) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Expired or invalid refresh token"})
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
 		return
 	}
 
-	// Generate a new access token
-	newAccessToken, err := h.generateAccessToken(claims.UserID, claims.Email)
+	now := time.Now()
+	newClaims := jwt.MapClaims{
+		"user_id":  claims["user_id"],
+		"username": claims["username"],
+		"fullname": claims["fullname"],
+		"email":    claims["email"],
+		"avatar":   claims["avatar"],
+		"iat":      now.Unix(),
+		"exp":      now.Add(h.tokenExpiration).Unix(), 
+	}
+
+	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newClaims)
+	newAccessToken, err := newToken.SignedString(h.jwtSecret)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate new access token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Token generation failed"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": newAccessToken,
+		"token":      newAccessToken,
+		"expires_in": h.tokenExpiration.Seconds(),
+		"token_type": "Bearer",
 	})
 }
 
