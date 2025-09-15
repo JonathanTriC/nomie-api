@@ -32,6 +32,8 @@ func RegisterRoutes(r *gin.Engine, db *database.Database, jwtSecret string) {
 			// MARK: Straight from {Area} Kitchens
 			protected.GET("/cuisine-picks", handler.GetCuisinePicks)
 			protected.GET("/search/:query", handler.GetSearchMeals)
+			protected.GET("/category/:query", handler.GetMealsByCategory)
+			protected.GET("/area/:query", handler.GetMealsByArea)
 			protected.GET("/detail/:mealId", handler.GetMealDetail)
 			// MARK: Your Tasty Collection
 			protected.GET("/favourites", handler.GetFavourites)

@@ -150,6 +150,84 @@ func (h *Handler) GetSearchMeals(c *gin.Context) {
 	c.JSON(http.StatusOK, meal)
 }
 
+func (h *Handler) GetMealsByCategory(c *gin.Context) {
+	// Get user ID from context
+	userIDInt, ok := utils.GetUserID(c)
+	if !ok {
+      c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+      return
+  }
+
+	userID := strconv.Itoa(userIDInt)
+
+	query := c.Param("query")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "10")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+			limit = 10
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+			page = 1
+	}
+
+	// Call service
+	meal, err := h.service.GetMealsByCategory(userID, query, limit, page)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return JSON
+	c.JSON(http.StatusOK, meal)
+}
+
+func (h *Handler) GetMealsByArea(c *gin.Context) {
+	// Get user ID from context
+	userIDInt, ok := utils.GetUserID(c)
+	if !ok {
+      c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+      return
+  }
+
+	userID := strconv.Itoa(userIDInt)
+
+	query := c.Param("query")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "10")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+			limit = 10
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page <= 0 {
+			page = 1
+	}
+
+	// Call service
+	meal, err := h.service.GetMealsByArea(userID, query, limit, page)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return JSON
+	c.JSON(http.StatusOK, meal)
+}
+
 func (h *Handler) GetMealDetail(c *gin.Context) {
 	userIDInt, ok := utils.GetUserID(c)
 	if !ok {

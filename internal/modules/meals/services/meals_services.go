@@ -23,6 +23,8 @@ type Service interface {
 	GetPopularPicks(userID string, limit, page int) (map[string]interface{}, error)
 	GetCuisinePicks(userID string, limit, page int) (map[string]interface{}, error)
 	GetSearchMeals(userID, query string, limit, page int) (map[string]interface{}, error)	
+	GetMealsByCategory(userID, query string, limit, page int) (map[string]interface{}, error)	
+	GetMealsByArea(userID, query string, limit, page int) (map[string]interface{}, error)	
 	GetMealDetail(userID, mealID string) (*meals_models.Meal, error)
 	GetFavourites(userID string) ([]meals_models.Favourite, error)
 	SetFavourite(userID, mealID, mealName, mealThumbImage string) error
@@ -255,6 +257,117 @@ func (s *service) GetSearchMeals(userID, query string, limit, page int) (map[str
     }, nil
 }
 
+func (s *service) GetMealsByCategory(userID, query string, limit, page int) (map[string]interface{}, error) {
+    url := fmt.Sprintf("https://www.themealdb.com/api/json/v1/1/filter.php?c=%s", query)
+    resp, err := http.Get(url)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    var apiResp meals_models.MealAPIResponse
+    if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+        return nil, err
+    }
+    if len(apiResp.Meals) == 0 {
+        return nil, fmt.Errorf("no meals found")
+    }
+
+    totalItems := len(apiResp.Meals)
+    totalPages := int(math.Ceil(float64(totalItems) / float64(limit)))
+
+    start := (page - 1) * limit
+    end := start + limit
+    if start > totalItems {
+        return map[string]interface{}{
+            "meals":      []map[string]interface{}{},
+            "page":       page,
+            "totalItems": totalItems,
+            "totalPages": totalPages,
+        }, nil
+    }
+    if end > totalItems {
+        end = totalItems
+    }
+
+    var meals []map[string]interface{}
+    for _, meal := range apiResp.Meals[start:end] {
+        builtMeal, err := s.buildMealFromAPIData(meal, userID)
+        if err != nil {
+            return nil, err
+        }
+
+        meals = append(meals, map[string]interface{}{
+            "mealId":         builtMeal.MealID,
+            "mealName":       builtMeal.MealName,
+            "mealThumbImage": builtMeal.MealThumbImage,
+            "isFavourite":    builtMeal.IsFavourite,
+        })
+    }
+
+    return map[string]interface{}{
+        "meals":      meals,
+        "page":       page,
+        "totalItems": totalItems,
+        "totalPages": totalPages,
+    }, nil
+}
+
+func (s *service) GetMealsByArea(userID, query string, limit, page int) (map[string]interface{}, error) {
+    url := fmt.Sprintf("https://www.themealdb.com/api/json/v1/1/filter.php?a=%s", query)
+    resp, err := http.Get(url)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    var apiResp meals_models.MealAPIResponse
+    if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+        return nil, err
+    }
+    if len(apiResp.Meals) == 0 {
+        return nil, fmt.Errorf("no meals found")
+    }
+
+    totalItems := len(apiResp.Meals)
+    totalPages := int(math.Ceil(float64(totalItems) / float64(limit)))
+
+    start := (page - 1) * limit
+    end := start + limit
+    if start > totalItems {
+        return map[string]interface{}{
+            "meals":      []map[string]interface{}{},
+            "page":       page,
+            "totalItems": totalItems,
+            "totalPages": totalPages,
+        }, nil
+    }
+    if end > totalItems {
+        end = totalItems
+    }
+
+    var meals []map[string]interface{}
+    for _, meal := range apiResp.Meals[start:end] {
+        builtMeal, err := s.buildMealFromAPIData(meal, userID)
+        if err != nil {
+            return nil, err
+        }
+
+        meals = append(meals, map[string]interface{}{
+            "mealId":         builtMeal.MealID,
+            "mealName":       builtMeal.MealName,
+            "mealThumbImage": builtMeal.MealThumbImage,
+            "isFavourite":    builtMeal.IsFavourite,
+        })
+    }
+
+    return map[string]interface{}{
+        "meals":      meals,
+        "page":       page,
+        "totalItems": totalItems,
+        "totalPages": totalPages,
+    }, nil
+}
 
 func (s *service) GetMealDetail(userID, mealID string) (*meals_models.Meal, error) {
 	url := fmt.Sprintf("https://www.themealdb.com/api/json/v1/1/lookup.php?i=%s", mealID)
