@@ -8,6 +8,7 @@ import (
 	"math"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 
 	meals_models "github.com/JonathanTriC/nomie-api/internal/modules/meals/models"
@@ -147,8 +148,7 @@ func (s *service) GetCuisinePicks(userID string, limit, page int) (map[string]in
 				return week % len(areas)        
 		}()
 		area := areas[weekIndex]
-
-    url := fmt.Sprintf("https://www.themealdb.com/api/json/v1/1/filter.php?a=%s", area)
+    url := fmt.Sprintf("https://www.themealdb.com/api/json/v1/1/filter.php?a=%s", area.Name)
     resp, err := http.Get(url)
     if err != nil {
         return nil, err
@@ -482,9 +482,13 @@ func (s *service) buildMealFromAPIData(m map[string]interface{}, userID string) 
 		ingredient := valOrEmpty(m[ingKey])
 		measure := valOrEmpty(m[meaKey])
 		if ingredient != "" {
+            ingredientForURL := strings.ReplaceAll(ingredient, " ", "_")
+			ingredientImageURL := fmt.Sprintf("https://www.themealdb.com/images/ingredients/%s-small.png", ingredientForURL)
+            
 			meal.MealIngredient = append(meal.MealIngredient, meals_models.MealIngredient{
 				IngredientName:    ingredient,
 				IngredientMeasure: measure,
+                IngredientImage:   ingredientImageURL,
 			})
 		}
 	}

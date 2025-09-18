@@ -27,6 +27,7 @@ type Meal struct {
 type MealIngredient struct {
 	IngredientName   string `json:"ingredientName"`
 	IngredientMeasure string `json:"ingredientMeasure"`
+	IngredientImage string `json:"ingredientImage"`
 }
 
 // Structs for mapping API response

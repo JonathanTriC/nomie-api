@@ -86,10 +86,9 @@ func (r *repository) LogLastSeen(userID, mealID, mealName, mealThumbImage string
 }
 
 func (r *repository) GetLastSeen(userID string, limit, page int) ([]map[string]interface{}, int, error) {
-    // count total
     var totalItems int
     err := r.db.QueryRow(`
-        SELECT COUNT(*) 
+        SELECT COUNT(DISTINCT meal_id) 
         FROM user_last_seen 
         WHERE user_id = $1
     `, userID).Scan(&totalItems)
@@ -97,15 +96,24 @@ func (r *repository) GetLastSeen(userID string, limit, page int) ([]map[string]i
         return nil, 0, err
     }
 
-    // pagination math
     offset := (page - 1) * limit
 
-    // fetch meals
     rows, err := r.db.Query(`
-        SELECT meal_id, meal_name, meal_thumb_image
-        FROM user_last_seen
-        WHERE user_id = $1
-        ORDER BY seen_at DESC
+        SELECT
+            uls.meal_id,
+            uls.meal_name,
+            uls.meal_thumb_image
+        FROM user_last_seen uls
+        INNER JOIN (
+            SELECT
+                meal_id,
+                MAX(seen_at) as max_seen_at
+            FROM user_last_seen
+            WHERE user_id = $1
+            GROUP BY meal_id
+        ) unique_seen ON uls.meal_id = unique_seen.meal_id AND uls.seen_at = unique_seen.max_seen_at
+        WHERE uls.user_id = $1
+        ORDER BY unique_seen.max_seen_at DESC
         LIMIT $2 OFFSET $3
     `, userID, limit, offset)
     if err != nil {
