@@ -8,6 +8,7 @@ import (
 	"github.com/JonathanTriC/nomie-api/internal/database"
 	"github.com/JonathanTriC/nomie-api/internal/utils"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/lib/pq"
 )
 
@@ -64,9 +65,57 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
         return
     }
 
-    c.JSON(http.StatusOK, gin.H{"message": "Profile updated successfully"})
-}
+    // Fetch updated user data from database
+    var updatedUser struct {
+        ID       int    `db:"id"`
+        Email    string `db:"email"`
+        Fullname string `db:"fullname"`
+        Username string `db:"username"`
+        Avatar   string `db:"avatar"`
+    }
 
+    err = h.db.DB.QueryRow(`
+        SELECT id, email, fullname, username, avatar 
+        FROM users 
+        WHERE id = $1
+    `, userID).Scan(&updatedUser.ID, &updatedUser.Email, &updatedUser.Fullname, &updatedUser.Username, &updatedUser.Avatar)
+    
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch updated profile"})
+        return
+    }
+
+    now := time.Now()
+    claims := jwt.MapClaims{
+        "user_id":  updatedUser.ID,
+        "username": updatedUser.Username,
+        "fullname": updatedUser.Fullname,
+        "email":    updatedUser.Email,
+        "avatar":   updatedUser.Avatar,
+        "iat":      now.Unix(),
+        "exp":      now.Add(h.tokenExpiration).Unix(),
+    }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    tokenString, err := token.SignedString(h.jwtSecret) 
+    
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Token generation failed"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Profile updated successfully",
+        "user": gin.H{
+            "user_id":  updatedUser.ID,
+            "email":    updatedUser.Email,
+            "fullname": updatedUser.Fullname,
+            "username": updatedUser.Username,
+            "avatar":   updatedUser.Avatar,
+            "token":    tokenString,
+        },
+    })
+}
 
 // ChangePassword allows authenticated users to change their password
 func (h *UserHandler) ChangePassword(c *gin.Context) {
